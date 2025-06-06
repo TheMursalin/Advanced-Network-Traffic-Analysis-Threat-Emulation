@@ -1,1 +1,46 @@
-python script here
+# analysis.py
+
+from scapy.all import rdpcap, IP, TCP, UDP, DNS, DNSQR
+
+def analyze_pcap(pcap_path):
+    packets = rdpcap(pcap_path)
+    suspicious_ips = {}
+    dns_requests = {}
+    http_requests = 0
+    tcp_connections = 0
+
+    for pkt in packets:
+        if IP in pkt:
+            src = pkt[IP].src
+            dst = pkt[IP].dst
+
+            if TCP in pkt:
+                tcp_connections += 1
+                if pkt[TCP].dport == 80 or pkt[TCP].sport == 80:
+                    http_requests += 1
+
+            if UDP in pkt and DNS in pkt:
+                if pkt[DNS].qr == 0 and DNSQR in pkt:
+                    domain = pkt[DNSQR].qname.decode(errors='ignore')
+                    dns_requests[domain] = dns_requests.get(domain, 0) + 1
+                    if domain.count('.') > 3:  # simple heuristic
+                        suspicious_ips[src] = suspicious_ips.get(src, 0) + 1
+
+    print("=== PCAP Analysis Report ===")
+    print(f"TCP Connections: {tcp_connections}")
+    print(f"HTTP Requests: {http_requests}")
+    print(f"Unique DNS Queries: {len(dns_requests)}\n")
+
+    print("Suspicious DNS Domains (Queried > 10 times):")
+    for domain, count in dns_requests.items():
+        if count > 10:
+            print(f"- {domain} : {count} queries")
+
+    print("\nSuspicious Source IPs (Multiple suspicious DNS queries):")
+    for ip, count in suspicious_ips.items():
+        if count > 3:
+            print(f"- {ip} : {count} suspicious queries")
+
+if __name__ == "__main__":
+    analyze_pcap("sample.pcap")  # Replace with your own .pcap file
+
